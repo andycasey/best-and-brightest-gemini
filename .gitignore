@@ -1,4 +1,4 @@
+raw_data/
+reduced_data/
 preparation.log
-raw_data
-reduced_data
 reduce_all.sh
