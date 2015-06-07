@@ -1,5 +1,5 @@
-Gemini Reduction
-================
+Reduce Gemini/GMOS long-slit spectra for The Best & Brightest Metal-Poor Stars 
+==============================================================================
 
 These scripts reduce Gemini/GMOS longslit spectra. The scripts are Python
 but the guts are actually IRAF (ew, I know).
