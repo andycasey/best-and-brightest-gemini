@@ -1,7 +1,7 @@
 Gemini Reduction
 ================
 
-These scripts prepare and reduce Gemini longslit spectra. The scripts are Python
+These scripts reduce Gemini/GMOS longslit spectra. The scripts are Python
 but the guts are actually IRAF (ew, I know).
 
 1) Clone this repository:
@@ -20,3 +20,7 @@ but the guts are actually IRAF (ew, I know).
 5) The preparation script will produce a `reduce_all.sh` script. Run it:
 
     source reduce_all.sh
+
+
+The one-dimensional, wavelength-calibrated, extracted, stacked spectra will 
+live in `reduced_data/<OBJECT_NAME>/<OBJECT_NAME>.fits`
