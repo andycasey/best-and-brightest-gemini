@@ -6,7 +6,7 @@ but the guts are actually IRAF (ew, I know).
 
 1) Clone this repository:
 
-    git clone git@github.com:andycasey/best-and-brightest-gemini.git
+    git clone git@github.com:andycasey/gemini-gmos-reduction-script.git
 
 2) Install [Ureka](http://ssb.stsci.edu/ureka/1.5.1/) from STScI.
 
