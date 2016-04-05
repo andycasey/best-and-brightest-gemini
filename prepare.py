@@ -100,15 +100,16 @@ for science_object in science_objects:
     logger.info("Creating structure for {}".format(science_object))
 
     # Create the folder for this object.
-    folder = os.path.join(REDUCED_DATA_FOLDER, science_object)
+    folder = os.path.join(REDUCED_DATA_FOLDER, science_object).replace(" ", "_")
     if not os.path.exists(folder):
         os.mkdir(folder)
         logger.info("Created folder {}".format(folder))
 
-    indices = np.where(summary["OBJECT"] == science_object)[0]
+    indices = np.where((summary["OBJECT"] == science_object) \
+        * (summary["OBSCLASS"] == "science"))[0]
 
     # Create symbolic links for science data.
-    for filename in summary["FILENAME"][indices]:
+    for index, filename in zip(indices, summary["FILENAME"][indices]):
         basename = os.path.basename(filename)
         source_filename = os.path.abspath(filename)
         destination_filename = os.path.join(folder, basename)
@@ -119,34 +120,34 @@ for science_object in science_objects:
             logger.info("Created symbolic link {0} --> {1}".format(source_filename,
                 destination_filename))
 
-    # Use the first observation to associate an ARC and FLAT.
-    obs = summary[indices[0]]
-    instrument_match = (summary["INSTRUME"] == obs["INSTRUME"])
-    flats = np.where((summary["OBSTYPE"] == "FLAT") * instrument_match)[0]
-    arcs = np.where((summary["OBSTYPE"] == "ARC") * instrument_match)[0]
+        # Associate an ARC and FLAT to each observation.
+        obs = summary[index]
+        instrument_match = (summary["INSTRUME"] == obs["INSTRUME"])
+        flats = np.where((summary["OBSTYPE"] == "FLAT") * instrument_match)[0]
+        arcs = np.where((summary["OBSTYPE"] == "ARC") * instrument_match)[0]
 
-    # Get the closest arc and flat.
-    flat_index = flats[np.argmin(np.abs(obs["TIME"] - summary["TIME"][flats]))]
-    arc_index = arcs[np.argmin(np.abs(obs["TIME"] - summary["TIME"][arcs]))]
+        # Get the closest arc and flat.
+        flat_index = flats[np.argmin(np.abs(obs["TIME"] - summary["TIME"][flats]))]
+        arc_index = arcs[np.argmin(np.abs(obs["TIME"] - summary["TIME"][arcs]))]
 
-    logger.info("Found arc {0} for {1}".format(summary["FILENAME"][arc_index],
-        science_object))
-    logger.info("Found flat {0} for {1}".format(summary["FILENAME"][flat_index],
-        science_object))
+        logger.info("Found arc {0} for {1} ({2})".format(summary["FILENAME"][arc_index],
+            science_object, filename))
+        logger.info("Found flat {0} for {1} ({2})".format(summary["FILENAME"][flat_index],
+            science_object, filename))
 
-    # Create symbol links for arc and flat data.
-    for filename \
-    in (summary["FILENAME"][flat_index], summary["FILENAME"][arc_index]):
+        # Create symbol links for arc and flat data.
+        for filename \
+        in (summary["FILENAME"][flat_index], summary["FILENAME"][arc_index]):
 
-        basename = os.path.basename(filename)
-        source_filename = os.path.abspath(filename)
-        destination_filename = os.path.join(folder, basename)
+            basename = os.path.basename(filename)
+            source_filename = os.path.abspath(filename)
+            destination_filename = os.path.join(folder, basename)
 
-        if not os.path.exists(destination_filename):
-            os.symlink(source_filename, destination_filename)
+            if not os.path.exists(destination_filename):
+                os.symlink(source_filename, destination_filename)
 
-            logger.info("Created symbolic link {0} --> {1}".format(
-                source_filename, destination_filename))
+                logger.info("Created symbolic link {0} --> {1}".format(
+                    source_filename, destination_filename))
 
     # Create symbolic link for the reduction script.
     source_filename = os.path.abspath("reduce.py")

@@ -74,6 +74,11 @@ logger.info("Getting object types..")
 obstypes = np.array([iraf.hselect(filename + "[0]", fields="OBSTYPE",
     expr="1=1", Stdout=1)[0] for filename in files])
 
+obsclass = np.array([iraf.hselect(filename + "[0]", fields="OBSCLASS",
+    expr="1=1", Stdout=1)[0] for filename in files])
+
+folder = os.path.dirname(files[0])
+
 # Check that we have one of each
 if "OBJECT" not in obstypes:
     raise IOError("no OBJECT image found in {0}".format(folder))
@@ -84,13 +89,9 @@ if "ARC" not in obstypes:
 if "FLAT" not in obstypes:
     raise IOError("no FLAT image found in {0}".format(folder))
 
-arc_filename = files[obstypes == "ARC"][0]
+arc_filenames = files[obstypes == "ARC"]
 flat_filename = files[obstypes == "FLAT"][0]
-object_filenames = files[obstypes == "OBJECT"]
-
-logger.info("ARC filename is {0}".format(arc_filename))
-logger.info("FLAT filename is {0}".format(flat_filename))
-logger.info("OBJECT filename(s) is/are {0}".format(object_filenames))
+object_filenames = files[(obstypes == "OBJECT") * (obsclass == "science")]
 
 # Prepare the data
 logger.info("Preparing..")
@@ -132,31 +133,66 @@ for object_filename in object_filenames:
 log_iraf_result(reduce_science_result)
 
 
-# Reduce the arc frame
-logger.info("Reducing arc frame..")
-reduce_arc_result = iraf.gsreduce("g{0}".format(arc_filename), fl_over=False,
-    fl_trim=True, fl_bias=False, fl_dark=False, fl_flat=False, fl_cut=True,
-    fl_gsappwave=True, yoffset=5.0, Stdout=1)
-log_iraf_result(reduce_arc_result)
+# Reduce the arc frames
+logger.info("Reducing arc frames..")
+for filename in arc_filenames:
+    reduce_arc_result = iraf.gsreduce("g{0}".format(filename), 
+        fl_over=False, fl_trim=True, fl_bias=False, fl_dark=False, 
+        fl_flat=False, fl_cut=True, fl_gsappwave=True, yoffset=5.0, Stdout=1)
+    log_iraf_result(reduce_arc_result)
 
-logger.info("Running gswavelength..")
-gswavelength_result = iraf.gswavelength("gsg{0}".format(arc_filename),
-    fl_inter="NO", nsum=5, step=5, function='chebyshev', order=6, fitcxord=5,
-    fitcyord=4, Stdout=1)
-log_iraf_result(gswavelength_result)
+    logger.info("Running gswavelength..")
+    #gswavelength_result = iraf.gswavelength("gsg{0}".format(filename),
+    #    fl_inter="NO", nsum=5, step=5, function='chebyshev', order=6, 
+    #    fitcxord=5, fitcyord=4, Stdout=1)
+    gswavelength_result = iraf.gswavelength("gsg{0}".format(filename),
+         fl_inter="NO", nsum=5, step=5, function="chebyshev", order="6",
+         fitcxord=5, fitcyord=4, Stdout=1, niterate=10, low_reject=1.5,
+         high_reject=1.5, fl_dbwrite="YES", fl_overwrite="yes")
+    log_iraf_result(gswavelength_result)
 
-# Apply transformations
-logger.info("Applying wavelength transformations to arc..")
-gstransform_arc_result = iraf.gstransform("gsg{0}".format(arc_filename),
-    wavtraname="gsg{0}".format(arc_filename), Stdout=1)
-log_iraf_result(gstransform_arc_result)
+    # Apply transformations
+    logger.info("Applying wavelength transformations to arc..")
+    gstransform_arc_result = iraf.gstransform("gsg{0}".format(filename),
+        wavtraname="gsg{0}".format(filename), Stdout=1)
+    log_iraf_result(gstransform_arc_result)
+
 
 logger.info("Doing wavelength transformations, sky and extraction:")
 for object_filename in object_filenames:
     logger.info("Working on filename {}".format(object_filename))
     logger.info("Applying wavelength transformations to object..")
 
-    gstransform_object_result = iraf.gstransform("gscg{0}".format(object_filename),
+    # Get nearest arc by time.
+    arc_times = []
+    for arc_filename in arc_filenames:
+        image = fits.open(arc_filename)
+
+        time_string = "{0}T{1}".format(
+            image[0].header["DATE"], image[0].header["UT"]) \
+            if "T" not in image[0].header["DATE"] else image[0].header["DATE"]
+        arc_times.append(time.mktime(time.strptime(time_string.split(".")[0],
+            "%Y-%m-%dT%H:%M:%S")))
+
+    image = fits.open(object_filename)
+    time_string = "{0}T{1}".format(
+        image[0].header["DATE"], image[0].header["UT"]) \
+        if "T" not in image[0].header["DATE"] else image[0].header["DATE"]
+    obs_time = time.mktime(time.strptime(time_string.split(".")[0],
+        "%Y-%m-%dT%H:%M:%S"))
+
+    # Get closest arc.
+    index = np.argmin(np.abs(np.array(arc_times) - obs_time))
+    arc_filename = arc_filenames[index]
+
+    log_iraf_result(["ASSOCIATING ARC {0} WITH FILENAME {1}".format(
+        arc_filename, object_filename)])
+
+    log_iraf_result(["ASSOCIATING FLAT {0} WITH FILENAME {1}".format(
+        flat_filename, object_filename)])
+
+    gstransform_object_result = iraf.gstransform(
+        "gscg{0}".format(object_filename),
         wavtraname="gsg{0}".format(arc_filename), Stdout=1)
     log_iraf_result(gstransform_object_result)
 
@@ -184,6 +220,20 @@ flux = np.zeros_like(dispersion)
 for filename in reduced_filenames:
     with fits.open(filename) as science_image:
         flux += science_image[2].data.flatten()
+
+    # And create an easy save file:
+    primary_hdu = fits.PrimaryHDU(header=image[0].header)
+    disp = image[2].header["CRVAL1"] \
+        + np.arange(image[2].header["NAXIS1"]) * image[2].header["CD1_1"]
+    data_hdu = fits.new_table([
+        fits.Column(name="disp", format="1D", array=disp),
+        fits.Column(name="flux", format="1D", array=flux),
+        fits.Column(name="inv_var", format="1D", array=1.0/flux)])
+
+    hdu_list = fits.HDUList([primary_hdu, data_hdu])
+    hdu_list.writeto("{0}-{1}".format(image[0].header["OBJECT"],
+        filename))
+
 flux[0 >= flux] = np.nan
 
 primary_hdu = fits.PrimaryHDU(header=image[0].header)
