@@ -68,7 +68,7 @@ logger.info("Cleaning up from any previous reductions..")
 os.system("rm -Rf master_flat.fits mosaic_master_flat.fits stgscg*.fits "
     "cg*.fits tgs*.fits g*.fits estgsc*.fits database J??????.?????????.?.fits")
                                                       
-files = np.array(glob("*.fits"))
+files = np.array(glob("[N|S]20*.fits"))
 
 logger.info("Getting object types..")
 obstypes = np.array([iraf.hselect(filename + "[0]", fields="OBSTYPE",
