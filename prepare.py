@@ -80,7 +80,8 @@ if not os.path.exists(REDUCED_DATA_FOLDER):
     os.mkdir(REDUCED_DATA_FOLDER)
 
 # Gunzip any files in the raw image directory.
-gzipped_raw_filenames = glob(os.path.join(RAW_DATA_FOLDER, "*.fits.gz"))
+gzipped_raw_filenames = glob(os.path.join(RAW_DATA_FOLDER, "*.fits.gz")) \
+                      + glob(os.path.join(RAW_DATA_FOLDER, "*.fits.bz2"))
 if len(gzipped_raw_filenames) > 0:
     logger.info("Gunzipping {} raw data images..".format(
         len(gzipped_raw_filenames)))
